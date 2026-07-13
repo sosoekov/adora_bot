@@ -28,16 +28,16 @@ threading.Thread(target=run_web).start()
 
 
 # ================== КНОПКИ ==================
-def get_keyboard(n, p, rolls, paradox_text):
+def get_keyboard(n, p, rolls):
     rolls_str = ",".join(map(str, rolls))
 
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔁 Повтор", callback_data=f"repeat_{n}_{p}")],
-        [InlineKeyboardButton("🧠 Переброс за WP", callback_data=f"wp_{rolls_str}_{p}_{paradox_text}")]
+        [InlineKeyboardButton("🧠 Переброс за WP", callback_data=f"wp_{rolls_str}_{p}")]
     ])
 
 
-# ================== ЛОГИКА БРОСКА ==================
+# ================== УСПЕХИ ==================
 def calculate_successes(rolls):
     successes = sum(1 for x in rolls if x >= 6)
     tens = sum(1 for x in rolls if x == 10)
@@ -45,6 +45,7 @@ def calculate_successes(rolls):
     return successes
 
 
+# ================== ЛОГИКА БРОСКА ==================
 def roll_logic(n, p, rolls=None):
     if rolls is None:
         rolls = [random.randint(1, 10) for _ in range(n)]
@@ -96,13 +97,15 @@ async def r(update: Update, context: ContextTypes.DEFAULT_TYPE):
     check = random.randint(1, 10)
     paradox_text = f"Проверка на парадокс: {check}"
 
-    text, rolls = roll_logic(n, p)
+    # сохраняем
+    context.user_data["paradox_text"] = paradox_text
 
+    text, rolls = roll_logic(n, p)
     full_text = f"{paradox_text}\n\n{text}"
 
     await update.message.reply_text(
         full_text,
-        reply_markup=get_keyboard(n, p, rolls, paradox_text),
+        reply_markup=get_keyboard(n, p, rolls),
         parse_mode="HTML"
     )
 
@@ -122,21 +125,26 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         check = random.randint(1, 10)
         paradox_text = f"Проверка на парадокс: {check}"
 
+        context.user_data["paradox_text"] = paradox_text
+
         text, rolls = roll_logic(n, p)
         full_text = f"{paradox_text}\n\n{text}"
 
         await query.edit_message_text(
             full_text,
-            reply_markup=get_keyboard(n, p, rolls, paradox_text),
+            reply_markup=get_keyboard(n, p, rolls),
             parse_mode="HTML"
         )
 
     # 🧠 Переброс за WP
     elif data.startswith("wp"):
-        _, rolls_str, p, paradox_text = data.split("_", 3)
+        _, rolls_str, p = data.split("_")
         p = int(p)
 
         rolls = list(map(int, rolls_str.split(",")))
+
+        # достаём сохранённый парадокс
+        paradox_text = context.user_data.get("paradox_text", "")
 
         # находим 3 минимальных
         indexed = list(enumerate(rolls))
@@ -186,7 +194,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(
             text,
-            reply_markup=get_keyboard(n, p, new_rolls, paradox_text),
+            reply_markup=get_keyboard(n, p, new_rolls),
             parse_mode="HTML"
         )
 
