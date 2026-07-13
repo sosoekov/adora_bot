@@ -15,3 +15,15 @@ author = 62122952
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python bot.py"
+
+[[workflows.workflow]]
+name = "Run bot and pckg"
+mode = "sequential"
+author = 62122952
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python bot.py"
