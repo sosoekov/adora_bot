@@ -5,10 +5,10 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
-import random
 
-TOKEN = "8935493373:AAHFxnyFgF1Tr8lpOYWY1QcWCUf_kmYdY9s"
+import os
 
+TOKEN = os.getenv("BOT_TOKEN")
 
 # ===== КНОПКИ =====
 def get_keyboard(n, p, rolls):
