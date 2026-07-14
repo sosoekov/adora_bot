@@ -1,27 +1,6 @@
 run = "python bot.py"
 
 modules = ["python-3.12"]
-[agent]
-expertMode = true
 
 [nix]
 channel = "stable-25_05"
-
-[workflows]
-
-[[workflows.workflow]]
-name = "Run bot and pckg"
-mode = "sequential"
-author = 62122952
-
-[[workflows.workflow.tasks]]
-task = "packager.installForAll"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python bot.py"
-
-[[ports]]
-localPort = 8080
-externalPort = 80
-
