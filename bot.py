@@ -39,9 +39,20 @@ def get_keyboard(n, p, rolls):
 
 # ================== УСПЕХИ ==================
 def calculate_successes(rolls):
-    successes = sum(1 for x in rolls if x >= 6)
-    tens = sum(1 for x in rolls if x == 10)
-    successes += tens // 2
+    successes = 0
+    tens_count = 0
+
+    for x in rolls:
+        if x >= 6:
+            if x == 10:
+                tens_count += 1
+                if tens_count % 2 == 0:
+                    successes += 3  # каждая вторая десятка
+                else:
+                    successes += 1
+            else:
+                successes += 1
+
     return successes
 
 
@@ -97,7 +108,6 @@ async def r(update: Update, context: ContextTypes.DEFAULT_TYPE):
     check = random.randint(1, 10)
     paradox_text = f"Проверка на парадокс: {check}"
 
-    # сохраняем
     context.user_data["paradox_text"] = paradox_text
 
     text, rolls = roll_logic(n, p)
@@ -146,9 +156,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # достаём сохранённый парадокс
         paradox_text = context.user_data.get("paradox_text", "")
 
-        # находим 3 минимальных
-        indexed = list(enumerate(rolls))
+        # ✅ берём только значения < 6
+        indexed = [(i, val) for i, val in enumerate(rolls) if val < 6]
         indexed.sort(key=lambda x: x[1])
+
+        # максимум 3
         to_reroll = [i for i, _ in indexed[:3]]
 
         new_rolls = rolls.copy()
