@@ -1,5 +1,8 @@
 run = "python bot.py"
 
+[deployment]
+run = "python bot.py"
+
 modules = ["python-3.12"]
 
 [nix]
