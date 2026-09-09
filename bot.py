@@ -96,6 +96,16 @@ def resolve_breakthrough(bt_rolls, paradox_before):
     return damage, removed, paradox_before - removed
 
 
+def touch_user(chat_id, user):
+    """Запомнить, как показывать игрока в /showchance.
+
+    Telegram не отдаёт список участников чата по запросу, поэтому имя
+    приходится ловить в момент обращения к боту и обновлять при следующем.
+    """
+    name = user.first_name or user.username or f"Игрок {user.id}"
+    storage.remember_name(chat_id, user.id, name)
+
+
 def roll_treat_button(chat_id, user_id):
     """Выпала ли игроку кнопка «любой ценой». Обновляет накопленный шанс."""
     chance = storage.get_treat_chance(chat_id, user_id)
@@ -335,7 +345,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/r M — бросок M кубов, парадоксы берутся из накопленного счётчика\n"
         "/r M p N — бросок M кубов, из них N парадоксных;\n"
         "   N перезаписывает накопленный счётчик\n"
-        "/paradox — показать свои счётчики\n\n"
+        "/paradox — показать свои счётчики\n"
+        "/showchance — шансы кнопки «любой ценой» у всех в этом чате\n\n"
         "/floor ЧИСЛО — порог проверки на парадокс\n"
         "/floor new ЧИСЛО — изменить порог\n"
         "/floor show — показать текущий порог\n\n"
@@ -361,12 +372,40 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def paradox_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.message.from_user.id
+    touch_user(chat_id, update.message.from_user)
 
     paradox, willpower = storage.get_counters(chat_id, user_id)
     await update.message.reply_text(
         f"⚡️ Парадоксов: {paradox}\n"
         f"🧠 Использовано воли: {willpower}"
     )
+
+
+# ================== /showchance ==================
+async def showchance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    touch_user(chat_id, update.message.from_user)
+
+    rows = storage.list_treat_chances(chat_id)
+    if not rows:
+        await update.message.reply_text(
+            "🧁 Шанс кнопки «любой ценой»\n\n"
+            "В этом чате ещё никто не обращался к боту."
+        )
+        return
+
+    lines = ["🧁 Шанс кнопки «любой ценой»:", ""]
+    for name, user_id, chance in rows:
+        lines.append(f"{name or f'Игрок {user_id}'} — {chance}%")
+
+    lines.append("")
+    lines.append(
+        f"Растёт на {TREAT_CHANCE_STEP}% за каждый бросок без кнопки, "
+        f"потолок {TREAT_CHANCE_MAX}%. Выпала — сбрасывается "
+        f"до {storage.TREAT_CHANCE_START}%."
+    )
+
+    await update.message.reply_text("\n".join(lines))
 
 
 # ================== /floor ==================
@@ -427,6 +466,7 @@ async def floor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def r(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.message.from_user.id
+    touch_user(chat_id, update.message.from_user)
 
     try:
         dice_count, declared_paradox = parse_roll_args(context.args)
@@ -459,6 +499,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     chat_id = query.message.chat.id
     user_id = query.from_user.id
+    touch_user(chat_id, query.from_user)
 
     # ♻️ Сброс Силы воли — только свой счётчик, чужие не трогаются.
     if data == "wpreset":
@@ -561,6 +602,7 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("r", r))
     app.add_handler(CommandHandler("paradox", paradox_command))
+    app.add_handler(CommandHandler("showchance", showchance_command))
     app.add_handler(CommandHandler("floor", floor_command))
     app.add_handler(CallbackQueryHandler(button))
 
