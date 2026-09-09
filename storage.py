@@ -17,20 +17,25 @@ read-only ``MappingProxyType``, поэтому запись вида
     )
 
     user_counters(
-        chat_id   INTEGER NOT NULL,
-        user_id   INTEGER NOT NULL,
-        paradox   INTEGER NOT NULL DEFAULT 0,
-        willpower INTEGER NOT NULL DEFAULT 0,
+        chat_id      INTEGER NOT NULL,
+        user_id      INTEGER NOT NULL,
+        paradox      INTEGER NOT NULL DEFAULT 0,
+        willpower    INTEGER NOT NULL DEFAULT 0,
+        treat_chance INTEGER NOT NULL DEFAULT 5,
         PRIMARY KEY (chat_id, user_id)
     )
 
 Счётчики живут отдельно для каждого игрока в каждом чате, поэтому в общем чате
 у всех свои значения.
 
-Миграция не требуется. ``chat_settings`` не менялась с момента появления, а
-``user_counters`` добавляется через ``CREATE TABLE IF NOT EXISTS`` — уже
-записанные пороги остаются на месте, у игроков просто появляются нулевые
-счётчики при первом обращении.
+Миграции
+--------
+``chat_settings`` не менялась с момента появления. ``user_counters`` создаётся
+через ``CREATE TABLE IF NOT EXISTS``, а колонка ``treat_chance`` добавляется в
+неё через ``ALTER TABLE ADD COLUMN`` в :func:`_migrate` — см. комментарий там.
+Обе операции ничего не удаляют: пороги и накопленные счётчики остаются на
+месте, у уже заведённых игроков просто появляется новое поле со стартовым
+значением.
 """
 
 import os
@@ -49,6 +54,10 @@ FLOOR_MAX = 10
 # Порог предбросковой проверки на парадокс: проверка проваливается на
 # значениях <= floor, то есть при 2 парадокс приходит примерно в 20% бросков.
 DEFAULT_FLOOR = 2
+
+# Стартовый шанс появления кнопки «любой ценой», в процентах. Он же значение
+# по умолчанию для колонки treat_chance.
+TREAT_CHANCE_START = 5
 
 
 @contextmanager
@@ -88,6 +97,24 @@ def init_db():
                 PRIMARY KEY (chat_id, user_id)
             )
             """
+        )
+        _migrate(conn)
+
+
+def _migrate(conn):
+    """Догнать схему до текущей версии, ничего не потеряв.
+
+    ``ALTER TABLE ADD COLUMN`` с ``DEFAULT`` не переписывает существующие
+    строки: у игроков, заведённых до появления кнопки «любой ценой», просто
+    появляется treat_chance со стартовым значением, а накопленные парадоксы
+    и воля остаются как были. Проверка по PRAGMA делает вызов идемпотентным,
+    поэтому миграция безопасно переживает любое число перезапусков.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(user_counters)")}
+    if "treat_chance" not in columns:
+        conn.execute(
+            "ALTER TABLE user_counters ADD COLUMN treat_chance "
+            f"INTEGER NOT NULL DEFAULT {TREAT_CHANCE_START}"
         )
 
 
@@ -172,4 +199,45 @@ def reset_willpower(chat_id, user_id):
             ON CONFLICT(chat_id, user_id) DO UPDATE SET willpower = 0
             """,
             (chat_id, user_id),
+        )
+
+
+def reset_paradox_and_willpower(chat_id, user_id):
+    """Обнулить и парадоксы, и волю — цена кнопки «любой ценой»."""
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_counters (chat_id, user_id, paradox, willpower)
+            VALUES (?, ?, 0, 0)
+            ON CONFLICT(chat_id, user_id)
+            DO UPDATE SET paradox = 0, willpower = 0
+            """,
+            (chat_id, user_id),
+        )
+
+
+# ================== ШАНС КНОПКИ «ЛЮБОЙ ЦЕНОЙ» ==================
+def get_treat_chance(chat_id, user_id):
+    """Текущий шанс появления кнопки для игрока, в процентах."""
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT treat_chance FROM user_counters "
+            "WHERE chat_id = ? AND user_id = ?",
+            (chat_id, user_id),
+        ).fetchone()
+    return row[0] if row else TREAT_CHANCE_START
+
+
+def set_treat_chance(chat_id, user_id, value):
+    """Записать новый шанс появления кнопки."""
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_counters
+                (chat_id, user_id, paradox, willpower, treat_chance)
+            VALUES (?, ?, 0, 0, ?)
+            ON CONFLICT(chat_id, user_id)
+            DO UPDATE SET treat_chance = excluded.treat_chance
+            """,
+            (chat_id, user_id, value),
         )
