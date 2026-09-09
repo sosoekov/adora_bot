@@ -22,8 +22,13 @@ read-only ``MappingProxyType``, поэтому запись вида
         paradox      INTEGER NOT NULL DEFAULT 0,
         willpower    INTEGER NOT NULL DEFAULT 0,
         treat_chance INTEGER NOT NULL DEFAULT 5,
+        display_name TEXT    NOT NULL DEFAULT '',
         PRIMARY KEY (chat_id, user_id)
     )
+
+``display_name`` — то, как показывать игрока в /showchance. Telegram не даёт
+списка участников чата по запросу, поэтому имя запоминается при обращении
+к боту и обновляется на каждом следующем.
 
 Счётчики живут отдельно для каждого игрока в каждом чате, поэтому в общем чате
 у всех свои значения.
@@ -31,8 +36,9 @@ read-only ``MappingProxyType``, поэтому запись вида
 Миграции
 --------
 ``chat_settings`` не менялась с момента появления. ``user_counters`` создаётся
-через ``CREATE TABLE IF NOT EXISTS``, а колонка ``treat_chance`` добавляется в
-неё через ``ALTER TABLE ADD COLUMN`` в :func:`_migrate` — см. комментарий там.
+через ``CREATE TABLE IF NOT EXISTS``, а колонки ``treat_chance`` и
+``display_name`` добавляются в неё через ``ALTER TABLE ADD COLUMN``
+в :func:`_migrate` — см. комментарий там.
 Обе операции ничего не удаляют: пороги и накопленные счётчики остаются на
 месте, у уже заведённых игроков просто появляется новое поле со стартовым
 значением.
@@ -115,6 +121,11 @@ def _migrate(conn):
         conn.execute(
             "ALTER TABLE user_counters ADD COLUMN treat_chance "
             f"INTEGER NOT NULL DEFAULT {TREAT_CHANCE_START}"
+        )
+    if "display_name" not in columns:
+        conn.execute(
+            "ALTER TABLE user_counters ADD COLUMN display_name "
+            "TEXT NOT NULL DEFAULT ''"
         )
 
 
@@ -216,6 +227,24 @@ def reset_paradox_and_willpower(chat_id, user_id):
         )
 
 
+def remember_name(chat_id, user_id, name):
+    """Запомнить, как показывать игрока в /showchance.
+
+    Счётчиков не касается: у существующей записи меняется только имя.
+    """
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_counters
+                (chat_id, user_id, paradox, willpower, treat_chance, display_name)
+            VALUES (?, ?, 0, 0, ?, ?)
+            ON CONFLICT(chat_id, user_id)
+            DO UPDATE SET display_name = excluded.display_name
+            """,
+            (chat_id, user_id, TREAT_CHANCE_START, name),
+        )
+
+
 # ================== ШАНС КНОПКИ «ЛЮБОЙ ЦЕНОЙ» ==================
 def get_treat_chance(chat_id, user_id):
     """Текущий шанс появления кнопки для игрока, в процентах."""
@@ -226,6 +255,20 @@ def get_treat_chance(chat_id, user_id):
             (chat_id, user_id),
         ).fetchone()
     return row[0] if row else TREAT_CHANCE_START
+
+
+def list_treat_chances(chat_id):
+    """[(имя, user_id, шанс), ...] по всем игрокам чата, что уже писали боту.
+
+    Отсортировано по убыванию шанса, при равенстве — по имени.
+    """
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT display_name, user_id, treat_chance FROM user_counters "
+            "WHERE chat_id = ?",
+            (chat_id,),
+        ).fetchall()
+    return sorted(rows, key=lambda row: (-row[2], row[0].lower(), row[1]))
 
 
 def set_treat_chance(chat_id, user_id, value):
