@@ -398,13 +398,6 @@ async def showchance_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for name, user_id, chance in rows:
         lines.append(f"{name or f'Игрок {user_id}'} — {chance}%")
 
-    lines.append("")
-    lines.append(
-        f"Растёт на {TREAT_CHANCE_STEP}% за каждый бросок без кнопки, "
-        f"потолок {TREAT_CHANCE_MAX}%. Выпала — сбрасывается "
-        f"до {storage.TREAT_CHANCE_START}%."
-    )
-
     await update.message.reply_text("\n".join(lines))
 
 
