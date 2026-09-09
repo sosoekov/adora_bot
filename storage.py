@@ -1,4 +1,4 @@
-"""Персистентное хранилище настроек бота (SQLite).
+"""Персистентное хранилище бота (SQLite).
 
 Почему появился этот модуль
 ---------------------------
@@ -9,19 +9,28 @@ read-only ``MappingProxyType``, поэтому запись вида
 И даже если бы запись работала, ``chat_data`` живёт в памяти процесса и
 теряется при рестарте.
 
-Схема (этап 1)
---------------
+Схема
+-----
     chat_settings(
         chat_id INTEGER PRIMARY KEY,
         floor   INTEGER NOT NULL
     )
 
-Миграция не требуется: персистентных данных до этого момента не существовало,
-файл БД создаётся при первом запуске.
+    user_counters(
+        chat_id   INTEGER NOT NULL,
+        user_id   INTEGER NOT NULL,
+        paradox   INTEGER NOT NULL DEFAULT 0,
+        willpower INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (chat_id, user_id)
+    )
 
-Этап 2 добавит счётчик парадоксов ОТДЕЛЬНОЙ таблицей через
-``CREATE TABLE IF NOT EXISTS`` — ``chat_settings`` при этом не пересоздаётся и
-не меняется, данные этапа 1 сохраняются как есть.
+Счётчики живут отдельно для каждого игрока в каждом чате, поэтому в общем чате
+у всех свои значения.
+
+Миграция не требуется. ``chat_settings`` не менялась с момента появления, а
+``user_counters`` добавляется через ``CREATE TABLE IF NOT EXISTS`` — уже
+записанные пороги остаются на месте, у игроков просто появляются нулевые
+счётчики при первом обращении.
 """
 
 import os
@@ -37,11 +46,9 @@ DB_PATH = os.getenv("DB_PATH", "bot_data.sqlite3")
 FLOOR_MIN = 1
 FLOOR_MAX = 10
 
-# ЭТАП 1: floor пока остаётся порогом УСПЕХА (x >= floor), поэтому дефолт
-# сохраняем прежним — 6, чтобы этап 1 не менял математику броска.
-# ЭТАП 3: когда floor станет только порогом ПАРАДОКСА, а успех — фиксированным
-# (x > 5), это значение меняется на 2.
-DEFAULT_FLOOR = 6
+# Порог предбросковой проверки на парадокс: проверка проваливается на
+# значениях <= floor, то есть при 2 парадокс приходит примерно в 20% бросков.
+DEFAULT_FLOOR = 2
 
 
 @contextmanager
@@ -71,8 +78,20 @@ def init_db():
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_counters (
+                chat_id   INTEGER NOT NULL,
+                user_id   INTEGER NOT NULL,
+                paradox   INTEGER NOT NULL DEFAULT 0,
+                willpower INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (chat_id, user_id)
+            )
+            """
+        )
 
 
+# ================== ПОРОГ ЧАТА ==================
 def get_floor(chat_id):
     """Порог чата, либо DEFAULT_FLOOR, если он не задавался."""
     with _db() as conn:
@@ -91,4 +110,66 @@ def set_floor(chat_id, value):
             ON CONFLICT(chat_id) DO UPDATE SET floor = excluded.floor
             """,
             (chat_id, value),
+        )
+
+
+# ================== СЧЁТЧИКИ ИГРОКА ==================
+def get_counters(chat_id, user_id):
+    """(парадоксы, использовано воли) для игрока в этом чате."""
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT paradox, willpower FROM user_counters "
+            "WHERE chat_id = ? AND user_id = ?",
+            (chat_id, user_id),
+        ).fetchone()
+    return (row[0], row[1]) if row else (0, 0)
+
+
+def get_paradox(chat_id, user_id):
+    return get_counters(chat_id, user_id)[0]
+
+
+def set_paradox(chat_id, user_id, value):
+    """Установить счётчик парадоксов. Ниже нуля не опускается."""
+    value = max(0, value)
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_counters (chat_id, user_id, paradox, willpower)
+            VALUES (?, ?, ?, 0)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET paradox = excluded.paradox
+            """,
+            (chat_id, user_id, value),
+        )
+    return value
+
+
+def add_willpower(chat_id, user_id):
+    """Отметить одно использование Силы воли и вернуть новое значение."""
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_counters (chat_id, user_id, paradox, willpower)
+            VALUES (?, ?, 0, 1)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET willpower = willpower + 1
+            """,
+            (chat_id, user_id),
+        )
+        row = conn.execute(
+            "SELECT willpower FROM user_counters WHERE chat_id = ? AND user_id = ?",
+            (chat_id, user_id),
+        ).fetchone()
+    return row[0]
+
+
+def reset_willpower(chat_id, user_id):
+    """Обнулить счётчик Силы воли одного игрока. Чужие не трогает."""
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_counters (chat_id, user_id, paradox, willpower)
+            VALUES (?, ?, 0, 0)
+            ON CONFLICT(chat_id, user_id) DO UPDATE SET willpower = 0
+            """,
+            (chat_id, user_id),
         )
