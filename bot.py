@@ -11,6 +11,8 @@ import os
 from flask import Flask
 import threading
 
+import storage
+
 TOKEN = os.getenv("BOT_TOKEN")
 
 # ================== WEB ==================
@@ -22,8 +24,6 @@ def home():
 
 def run_web():
     app_web.run(host="0.0.0.0", port=8080)
-
-threading.Thread(target=run_web).start()
 
 
 # ================== КНОПКИ ==================
@@ -109,16 +109,37 @@ async def floor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if args[0] == "show":
-        floor = context.application.chat_data.get(chat_id, {}).get("floor", 6)
+        floor = storage.get_floor(chat_id)
         await update.message.reply_text(f"Текущий порог: {floor}")
         return
 
-    if args[0] == "new" and len(args) >= 2:
-        value = int(args[1])
+    if args[0] == "new":
+        if len(args) < 2:
+            await update.message.reply_text(
+                "После /floor new нужно число. Например: /floor new 6"
+            )
+            return
+        raw = args[1]
     else:
-        value = int(args[0])
+        raw = args[0]
 
-    context.application.chat_data.setdefault(chat_id, {})["floor"] = value
+    try:
+        value = int(raw)
+    except ValueError:
+        await update.message.reply_text(
+            f"Порог должен быть целым числом от {storage.FLOOR_MIN} "
+            f"до {storage.FLOOR_MAX}. Получено: «{raw}»"
+        )
+        return
+
+    if not storage.FLOOR_MIN <= value <= storage.FLOOR_MAX:
+        await update.message.reply_text(
+            f"Порог должен быть от {storage.FLOOR_MIN} до {storage.FLOOR_MAX}. "
+            f"Получено: {value}"
+        )
+        return
+
+    storage.set_floor(chat_id, value)
 
     await update.message.reply_text(f"Порог установлен: {value}")
 
@@ -128,7 +149,7 @@ async def r(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     chat_id = update.effective_chat.id
 
-    floor = context.application.chat_data.get(chat_id, {}).get("floor", 6)
+    floor = storage.get_floor(chat_id)
 
     if not args:
         n, p = 4, 0
@@ -161,7 +182,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     chat_id = query.message.chat.id
 
-    floor = context.application.chat_data.get(chat_id, {}).get("floor", 6)
+    floor = storage.get_floor(chat_id)
 
     # 🔁 Повтор
     if data.startswith("repeat"):
@@ -241,12 +262,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ================== ЗАПУСК ==================
-app = ApplicationBuilder().token(TOKEN).build()
+def main():
+    storage.init_db()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(CommandHandler("r", r))
-app.add_handler(CommandHandler("floor", floor_command))
-app.add_handler(CallbackQueryHandler(button))
+    threading.Thread(target=run_web).start()
 
-app.run_polling()
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("r", r))
+    app.add_handler(CommandHandler("floor", floor_command))
+    app.add_handler(CallbackQueryHandler(button))
+
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
