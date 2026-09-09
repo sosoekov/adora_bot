@@ -116,6 +116,7 @@ async def floor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if args[0] == "new":
         if len(args) < 2:
             await update.message.reply_text(
+                "Ошибка изменения порога.\n"
                 "После /floor new нужно число. Например: /floor new 6"
             )
             return
@@ -127,6 +128,7 @@ async def floor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         value = int(raw)
     except ValueError:
         await update.message.reply_text(
+            "Ошибка изменения порога.\n"
             f"Порог должен быть целым числом от {storage.FLOOR_MIN} "
             f"до {storage.FLOOR_MAX}. Получено: «{raw}»"
         )
@@ -134,14 +136,21 @@ async def floor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not storage.FLOOR_MIN <= value <= storage.FLOOR_MAX:
         await update.message.reply_text(
+            "Ошибка изменения порога.\n"
             f"Порог должен быть от {storage.FLOOR_MIN} до {storage.FLOOR_MAX}. "
             f"Получено: {value}"
         )
         return
 
+    # старое значение читаем ДО записи, иначе покажем новое дважды
+    old_floor = storage.get_floor(chat_id)
     storage.set_floor(chat_id, value)
 
-    await update.message.reply_text(f"Порог установлен: {value}")
+    await update.message.reply_text(
+        "Порог успешно изменен.\n"
+        f"Старый порог: {old_floor}\n"
+        f"Новый порог: {value}"
+    )
 
 
 # ================== /r ==================
