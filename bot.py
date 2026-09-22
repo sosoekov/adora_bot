@@ -657,7 +657,12 @@ def main():
     app.add_error_handler(on_error)
 
     logger.info("Хендлеры зарегистрированы, начинаю опрос Telegram")
-    app.run_polling()
+
+    # drop_pending_updates: при старте выбрасываем очередь, накопившуюся пока
+    # бот лежал. Иначе он разгребает протухшие нажатия — callback-запросы к
+    # тому моменту уже недействительны, и это выглядит как хаотичные ответы
+    # на кнопки, которых никто только что не трогал.
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":

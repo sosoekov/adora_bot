@@ -2,7 +2,7 @@ run = "python bot.py"
 modules = ["python-3.12"]
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "vm"
 run = "python3 bot.py"
 
 [nix]
