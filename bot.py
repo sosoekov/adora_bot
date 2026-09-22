@@ -37,13 +37,11 @@ SUCCESS_THRESHOLD = 6
 # Нажать можно один раз на бросок, после этого кнопка пропадает.
 WP_REROLL = 3
 
-# «Любой ценой»: переброс всех кубов значениями от 6 до 10 ценой обнуления
-# парадоксов и Силы воли. Шанс появления кнопки копится: стартует с
-# TREAT_CHANCE_START, каждый бросок без неё поднимает его на шаг до потолка,
-# появление сбрасывает обратно к старту. Шанс свой у каждого игрока.
-TREAT_DIE_MIN = 6
-TREAT_CHANCE_STEP = 1
-TREAT_CHANCE_MAX = 50
+# «Любой ценой» отключена. Чтобы вернуть — раскомментировать эти константы и
+# все блоки, помеченные ниже как относящиеся к кнопке «любой ценой».
+# TREAT_DIE_MIN = 6
+# TREAT_CHANCE_STEP = 1
+# TREAT_CHANCE_MAX = 50
 
 DEFAULT_DICE = 4
 
@@ -106,18 +104,19 @@ def touch_user(chat_id, user):
     storage.remember_name(chat_id, user.id, name)
 
 
-def roll_treat_button(chat_id, user_id):
-    """Выпала ли игроку кнопка «любой ценой». Обновляет накопленный шанс."""
-    chance = storage.get_treat_chance(chat_id, user_id)
-    appeared = random.randint(1, 100) <= chance
-
-    storage.set_treat_chance(
-        chat_id,
-        user_id,
-        storage.TREAT_CHANCE_START if appeared
-        else min(chance + TREAT_CHANCE_STEP, TREAT_CHANCE_MAX),
-    )
-    return appeared
+# Кнопка «любой ценой» отключена — функция оставлена закомментированной.
+# def roll_treat_button(chat_id, user_id):
+#     """Выпала ли игроку кнопка «любой ценой». Обновляет накопленный шанс."""
+#     chance = storage.get_treat_chance(chat_id, user_id)
+#     appeared = random.randint(1, 100) <= chance
+#
+#     storage.set_treat_chance(
+#         chat_id,
+#         user_id,
+#         storage.TREAT_CHANCE_START if appeared
+#         else min(chance + TREAT_CHANCE_STEP, TREAT_CHANCE_MAX),
+#     )
+#     return appeared
 
 
 def wp_candidates(rolls, paradox_count):
@@ -306,13 +305,14 @@ def get_keyboard(dice_count, declared_paradox, rolls, paradox_count,
             )
         ])
 
-    if treat:
-        rows.append([
-            InlineKeyboardButton(
-                "🧁 любой ценой (бесплатно)",
-                callback_data=f"treat_{dice_count}",
-            )
-        ])
+    # Кнопка «любой ценой» отключена.
+    # if treat:
+    #     rows.append([
+    #         InlineKeyboardButton(
+    #             "🧁 любой ценой (бесплатно)",
+    #             callback_data=f"treat_{dice_count}",
+    #         )
+    #     ])
 
     rows.append([
         InlineKeyboardButton("♻️ Сбросить волю", callback_data="wpreset")
@@ -377,24 +377,24 @@ async def paradox_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================== /showchance ==================
-async def showchance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    touch_user(chat_id, update.message.from_user)
-
-    rows = storage.list_treat_chances(chat_id)
-    if not rows:
-        await update.message.reply_text(
-            "🧁 Шанс кнопки «любой ценой»\n\n"
-            "В этом чате ещё никто не обращался к боту."
-        )
-        return
-
-    lines = ["🧁 Шанс кнопки «любой ценой»:", ""]
-    for name, user_id, chance in rows:
-        lines.append(f"{name or f'Игрок {user_id}'} — {chance}%")
-
-    await update.message.reply_text("\n".join(lines))
+# ================== /showchance (отключена вместе с кнопкой «любой ценой») ==================
+# async def showchance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     chat_id = update.effective_chat.id
+#     touch_user(chat_id, update.message.from_user)
+#
+#     rows = storage.list_treat_chances(chat_id)
+#     if not rows:
+#         await update.message.reply_text(
+#             "🧁 Шанс кнопки «любой ценой»\n\n"
+#             "В этом чате ещё никто не обращался к боту."
+#         )
+#         return
+#
+#     lines = ["🧁 Шанс кнопки «любой ценой»:", ""]
+#     for name, user_id, chance in rows:
+#         lines.append(f"{name or f'Игрок {user_id}'} — {chance}%")
+#
+#     await update.message.reply_text("\n".join(lines))
 
 
 # ================== /floor ==================
@@ -469,13 +469,14 @@ async def r(update: Update, context: ContextTypes.DEFAULT_TYPE):
     remember_roll(context, check, check_passed, breakthrough)
 
     _, willpower = storage.get_counters(chat_id, user_id)
-    treat = roll_treat_button(chat_id, user_id)
+    # Кнопка «любой ценой» отключена.
+    # treat = roll_treat_button(chat_id, user_id)
 
     await update.message.reply_text(
         render_roll(check, check_passed, rolls, paradox_count,
                     breakthrough, willpower),
         reply_markup=get_keyboard(dice_count, declared_paradox,
-                                  rolls, paradox_count, treat=treat),
+                                  rolls, paradox_count),
         parse_mode="HTML",
     )
 
@@ -509,50 +510,50 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         remember_roll(context, check, check_passed, breakthrough)
 
         _, willpower = storage.get_counters(chat_id, user_id)
-        treat = roll_treat_button(chat_id, user_id)
+        # Кнопка «любой ценой» отключена.
+        # treat = roll_treat_button(chat_id, user_id)
 
         await query.edit_message_text(
             render_roll(check, check_passed, rolls, paradox_count,
                         breakthrough, willpower),
             reply_markup=get_keyboard(dice_count, declared_paradox,
-                                      rolls, paradox_count, treat=treat),
+                                      rolls, paradox_count),
             parse_mode="HTML",
         )
         return
 
-    # 🧁 Любой ценой — переброс всех кубов значениями 6-10, ценой обнуления
-    # парадоксов и Силы воли.
-    if data.startswith("treat_"):
-        dice_count = int(data.split("_")[1])
-
-        storage.reset_paradox_and_willpower(chat_id, user_id)
-        new_rolls = [random.randint(TREAT_DIE_MIN, DIE_MAX)
-                     for _ in range(dice_count)]
-
-        # Парадоксов больше нет, значит нет ни парадоксных кубов, ни прорыва.
-        check, check_passed = context.user_data.get("check", (0, True))
-        context.user_data["breakthrough"] = ""
-
-        await query.edit_message_text(
-            render_roll(
-                check, check_passed, new_rolls, 0, "", 0,
-                treat_note="🧁 Любой ценой: все кубы переброшены, "
-                           "парадоксы и воля обнулены",
-            ),
-            reply_markup=get_keyboard(dice_count, None, new_rolls, 0,
-                                      wp_used=True),
-            parse_mode="HTML",
-        )
-        return
+    # 🧁 Любой ценой — отключена вместе с кнопкой.
+    # if data.startswith("treat_"):
+    #     dice_count = int(data.split("_")[1])
+    #
+    #     storage.reset_paradox_and_willpower(chat_id, user_id)
+    #     new_rolls = [random.randint(TREAT_DIE_MIN, DIE_MAX)
+    #                  for _ in range(dice_count)]
+    #
+    #     # Парадоксов больше нет, значит нет ни парадоксных кубов, ни прорыва.
+    #     check, check_passed = context.user_data.get("check", (0, True))
+    #     context.user_data["breakthrough"] = ""
+    #
+    #     await query.edit_message_text(
+    #         render_roll(
+    #             check, check_passed, new_rolls, 0, "", 0,
+    #             treat_note="🧁 Любой ценой: все кубы переброшены, "
+    #                        "парадоксы и воля обнулены",
+    #         ),
+    #         reply_markup=get_keyboard(dice_count, None, new_rolls, 0,
+    #                                   wp_used=True),
+    #         parse_mode="HTML",
+    #     )
+    #     return
 
     # 🧠 Переброс за WP
     if data.startswith("wp_"):
         parts = data.split("_")
         rolls = decode_rolls(parts[1])
         paradox_count = int(parts[2])
-        # Хвост с флагом кнопки «любой ценой» появился позже, поэтому у
-        # сообщений, отправленных до обновления, его может не быть.
-        treat = len(parts) > 3 and parts[3] == "1"
+        # Кнопка «любой ценой» отключена, флаг из callback_data больше не
+        # используется (хвост мог остаться в старых сообщениях).
+        # treat = len(parts) > 3 and parts[3] == "1"
 
         to_reroll = wp_candidates(rolls, paradox_count)
         if not to_reroll:
@@ -574,7 +575,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Переброс за волю одноразовый: кнопка больше не выводится.
             reply_markup=get_keyboard(len(new_rolls), paradox_count,
                                       new_rolls, paradox_count,
-                                      wp_used=True, treat=treat),
+                                      wp_used=True),
             parse_mode="HTML",
         )
 
@@ -591,7 +592,8 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("r", r))
     app.add_handler(CommandHandler("paradox", paradox_command))
-    app.add_handler(CommandHandler("showchance", showchance_command))
+    # Кнопка «любой ценой» отключена вместе с командой её просмотра.
+    # app.add_handler(CommandHandler("showchance", showchance_command))
     app.add_handler(CommandHandler("floor", floor_command))
     app.add_handler(CallbackQueryHandler(button))
 

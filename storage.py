@@ -245,42 +245,45 @@ def remember_name(chat_id, user_id, name):
         )
 
 
-# ================== ШАНС КНОПКИ «ЛЮБОЙ ЦЕНОЙ» ==================
-def get_treat_chance(chat_id, user_id):
-    """Текущий шанс появления кнопки для игрока, в процентах."""
-    with _db() as conn:
-        row = conn.execute(
-            "SELECT treat_chance FROM user_counters "
-            "WHERE chat_id = ? AND user_id = ?",
-            (chat_id, user_id),
-        ).fetchone()
-    return row[0] if row else TREAT_CHANCE_START
-
-
-def list_treat_chances(chat_id):
-    """[(имя, user_id, шанс), ...] по всем игрокам чата, что уже писали боту.
-
-    Отсортировано по убыванию шанса, при равенстве — по имени.
-    """
-    with _db() as conn:
-        rows = conn.execute(
-            "SELECT display_name, user_id, treat_chance FROM user_counters "
-            "WHERE chat_id = ?",
-            (chat_id,),
-        ).fetchall()
-    return sorted(rows, key=lambda row: (-row[2], row[0].lower(), row[1]))
-
-
-def set_treat_chance(chat_id, user_id, value):
-    """Записать новый шанс появления кнопки."""
-    with _db() as conn:
-        conn.execute(
-            """
-            INSERT INTO user_counters
-                (chat_id, user_id, paradox, willpower, treat_chance)
-            VALUES (?, ?, 0, 0, ?)
-            ON CONFLICT(chat_id, user_id)
-            DO UPDATE SET treat_chance = excluded.treat_chance
-            """,
-            (chat_id, user_id, value),
-        )
+# ================== ШАНС КНОПКИ «ЛЮБОЙ ЦЕНОЙ» (отключена) ==================
+# Кнопка «любой ценой» и команда /showchance отключены в bot.py — эти функции
+# были их единственными потребителями. Колонки treat_chance/display_name и
+# миграция выше не трогаются, чтобы не терять данные и не усложнять апгрейд.
+# def get_treat_chance(chat_id, user_id):
+#     """Текущий шанс появления кнопки для игрока, в процентах."""
+#     with _db() as conn:
+#         row = conn.execute(
+#             "SELECT treat_chance FROM user_counters "
+#             "WHERE chat_id = ? AND user_id = ?",
+#             (chat_id, user_id),
+#         ).fetchone()
+#     return row[0] if row else TREAT_CHANCE_START
+#
+#
+# def list_treat_chances(chat_id):
+#     """[(имя, user_id, шанс), ...] по всем игрокам чата, что уже писали боту.
+#
+#     Отсортировано по убыванию шанса, при равенстве — по имени.
+#     """
+#     with _db() as conn:
+#         rows = conn.execute(
+#             "SELECT display_name, user_id, treat_chance FROM user_counters "
+#             "WHERE chat_id = ?",
+#             (chat_id,),
+#         ).fetchall()
+#     return sorted(rows, key=lambda row: (-row[2], row[0].lower(), row[1]))
+#
+#
+# def set_treat_chance(chat_id, user_id, value):
+#     """Записать новый шанс появления кнопки."""
+#     with _db() as conn:
+#         conn.execute(
+#             """
+#             INSERT INTO user_counters
+#                 (chat_id, user_id, paradox, willpower, treat_chance)
+#             VALUES (?, ?, 0, 0, ?)
+#             ON CONFLICT(chat_id, user_id)
+#             DO UPDATE SET treat_chance = excluded.treat_chance
+#             """,
+#             (chat_id, user_id, value),
+#         )
