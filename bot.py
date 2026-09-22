@@ -5,13 +5,23 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
+import logging
 import random
 import os
+import traceback
 
 from flask import Flask
 import threading
 
 import storage
+
+# Без basicConfig python-telegram-bot пишет свои ошибки в никуда: любой сбой
+# в хендлере проглатывался, и бот просто молчал в ответ.
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(name)s | %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger("adora")
 
 TOKEN = os.getenv("BOT_TOKEN")
 
@@ -492,7 +502,15 @@ async def r(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================== КНОПКИ ==================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+
+    # Подтверждение Telegram не должно обрывать обработку. Протухший callback
+    # (бот лежал или перезапускался в момент нажатия) роняет answer(), и
+    # раньше из-за этого не выполнялось вообще ничего — кнопка выглядела
+    # мёртвой. Сделать то, что просили, мы можем и без подтверждения.
+    try:
+        await query.answer()
+    except Exception:
+        logger.warning("Не удалось подтвердить callback", exc_info=True)
 
     data = query.data
     chat_id = query.message.chat.id
@@ -589,8 +607,39 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# ================== ОШИБКИ ==================
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """Не проглатывать сбои: трасса в консоль, короткая причина в чат.
+
+    Раньше исключение в хендлере уходило в никуда, и пользователь видел
+    тишину — отличить сломанную кнопку от «так и задумано» было невозможно.
+    """
+    logger.error(
+        "Сбой при обработке апдейта:\n%s",
+        "".join(
+            traceback.format_exception(
+                type(context.error), context.error, context.error.__traceback__
+            )
+        ),
+    )
+
+    chat = getattr(getattr(update, "effective_chat", None), "id", None)
+    if chat is None:
+        return
+
+    reason = "".join(
+        traceback.format_exception_only(type(context.error), context.error)
+    ).strip()
+    try:
+        await context.bot.send_message(chat, f"⚠️ Сбой: {reason}")
+    except Exception:
+        # Отправка тоже может не пройти — молча, иначе получим рекурсию.
+        logger.exception("Не удалось отправить сообщение о сбое")
+
+
 # ================== ЗАПУСК ==================
 def main():
+    logger.info("Запуск бота. DB_PATH=%s", storage.DB_PATH)
     storage.init_db()
 
     threading.Thread(target=run_web).start()
@@ -605,6 +654,9 @@ def main():
     app.add_handler(CommandHandler("floor", floor_command))
     app.add_handler(CallbackQueryHandler(button))
 
+    app.add_error_handler(on_error)
+
+    logger.info("Хендлеры зарегистрированы, начинаю опрос Telegram")
     app.run_polling()
 
 
