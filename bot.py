@@ -383,23 +383,27 @@ async def paradox_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ================== /showchance ==================
-async def showchance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    touch_user(chat_id, update.message.from_user)
-
-    rows = storage.list_treat_chances(chat_id)
-    if not rows:
-        await update.message.reply_text(
-            "🧁 Шанс кнопки «любой ценой»\n\n"
-            "В этом чате ещё никто не обращался к боту."
-        )
-        return
-
-    lines = ["🧁 Шанс кнопки «любой ценой»:", ""]
-    for name, user_id, chance in rows:
-        lines.append(f"{name or f'Игрок {user_id}'} — {chance}%")
-
-    await update.message.reply_text("\n".join(lines))
+# Команда отключена вместе с кнопкой «любой ценой»: показывать нечего, шанс
+# больше не двигается. touch_user ниже по коду оставлен живым намеренно —
+# он продолжает обновлять имена игроков, поэтому расскомментирование сразу
+# даст корректный список, а не «Игрок 777».
+# async def showchance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     chat_id = update.effective_chat.id
+#     touch_user(chat_id, update.message.from_user)
+#
+#     rows = storage.list_treat_chances(chat_id)
+#     if not rows:
+#         await update.message.reply_text(
+#             "🧁 Шанс кнопки «любой ценой»\n\n"
+#             "В этом чате ещё никто не обращался к боту."
+#         )
+#         return
+#
+#     lines = ["🧁 Шанс кнопки «любой ценой»:", ""]
+#     for name, user_id, chance in rows:
+#         lines.append(f"{name or f'Игрок {user_id}'} — {chance}%")
+#
+#     await update.message.reply_text("\n".join(lines))
 
 
 # ================== /floor ==================
@@ -597,7 +601,7 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("r", r))
     app.add_handler(CommandHandler("paradox", paradox_command))
-    app.add_handler(CommandHandler("showchance", showchance_command))
+    # app.add_handler(CommandHandler("showchance", showchance_command))
     app.add_handler(CommandHandler("floor", floor_command))
     app.add_handler(CallbackQueryHandler(button))
 
